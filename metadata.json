@@ -1,0 +1,8 @@
+{
+  "name": "শিশুদের ইসলাম শিক্ষা",
+  "description": "ছোট শিশুদের জন্য মজার গেম, অভিযান ও অ্যানিমেশনের মাধ্যমে আরবি অক্ষর, সঠিক উচ্চারণ, শব্দ ও কোরআন পড়া শেখার অফলাইন ও অনলাইন অ্যাপ (Islamic Education for Kids)।",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

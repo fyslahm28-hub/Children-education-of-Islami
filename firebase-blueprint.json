@@ -1,0 +1,103 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Child explorer profile, overall progress summary, and parent goals.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "explorerName": { "type": "string", "description": "Child explorer display name" },
+        "avatarIndex": { "type": "integer", "description": "Selected avatar index" },
+        "totalStars": { "type": "integer", "description": "Total stars earned across lessons and games" },
+        "completedLevelsCount": { "type": "integer", "description": "Number of completed curriculum levels" },
+        "lastActiveLevelId": { "type": "integer", "description": "Last active curriculum level ID" },
+        "dailyGoalMinutes": { "type": "integer", "description": "Parent-configured daily practice target in minutes" },
+        "dailyPracticedMinutes": { "type": "integer", "description": "Minutes practiced today" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of last update" }
+      },
+      "required": ["userId", "explorerName", "avatarIndex", "totalStars", "completedLevelsCount", "lastActiveLevelId", "dailyGoalMinutes", "dailyPracticedMinutes", "createdAt", "updatedAt"]
+    },
+    "LessonProgress": {
+      "title": "LessonProgress",
+      "description": "Per-lesson progress record keyed by deterministic lesson_N document ID to prevent duplicate records during offline-to-online sync.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "levelId": { "type": "integer", "description": "Curriculum level identifier" },
+        "starsEarned": { "type": "integer", "description": "Best stars earned (1..3)" },
+        "bestScore": { "type": "integer", "description": "Highest quiz score achieved" },
+        "isCompleted": { "type": "boolean", "description": "Whether the lesson is completed" },
+        "mistakeCategory": { "type": "string", "description": "Last mistake category for adaptive review" },
+        "clientUpdatedAtEpoch": { "type": "integer", "description": "Monotonic client epoch millis to prevent stale overwrites" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of last update" }
+      },
+      "required": ["userId", "levelId", "starsEarned", "bestScore", "isCompleted", "mistakeCategory", "clientUpdatedAtEpoch", "createdAt", "updatedAt"]
+    },
+    "CurriculumLesson": {
+      "title": "CurriculumLesson",
+      "description": "Dynamic Islamic education lesson managed by verified Admins.",
+      "type": "object",
+      "properties": {
+        "stageNumber": { "type": "integer", "description": "Stage 1..6 in the Islamic learning journey" },
+        "levelOrder": { "type": "integer", "description": "Sequential order of the lesson" },
+        "titleBn": { "type": "string", "description": "Bengali title of the lesson" },
+        "arabicContent": { "type": "string", "description": "Verified Arabic script content" },
+        "pronunciationBn": { "type": "string", "description": "Bengali pronunciation guide" },
+        "meaningBn": { "type": "string", "description": "Bengali meaning or tajweed rule explanation" },
+        "audioSourceUrl": { "type": "string", "description": "Verified recitation audio URL or identifier" },
+        "teacherVerified": { "type": "boolean", "description": "Whether a qualified Quran teacher has verified the Arabic and audio" },
+        "isPublished": { "type": "boolean", "description": "Whether the lesson is published to learners" },
+        "authorUid": { "type": "string", "description": "Admin UID who created/updated the lesson" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["stageNumber", "levelOrder", "titleBn", "arabicContent", "pronunciationBn", "meaningBn", "audioSourceUrl", "teacherVerified", "isPublished", "authorUid", "createdAt", "updatedAt"]
+    },
+    "AdminAuditLog": {
+      "title": "AdminAuditLog",
+      "description": "Immutable audit log of administrative actions.",
+      "type": "object",
+      "properties": {
+        "adminUid": { "type": "string", "description": "Admin UID who performed the action" },
+        "actionType": { "type": "string", "description": "Action type (CREATE_LESSON, UPDATE_LESSON, PUBLISH_LESSON, UPDATE_SETTINGS)" },
+        "targetId": { "type": "string", "description": "Target document ID" },
+        "summaryBn": { "type": "string", "description": "Human-readable Bengali summary of the change" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["adminUid", "actionType", "targetId", "summaryBn", "createdAt"]
+    },
+    "AdminRole": {
+      "title": "AdminRole",
+      "description": "Server-side admin role assignment document.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "description": "Admin role name" }
+      },
+      "required": ["role"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile and parent dashboard configuration."
+    },
+    "/users/{userId}/lesson_progress/{progressId}": {
+      "schema": { "$ref": "#/entities/LessonProgress" },
+      "description": "Deterministic per-lesson progress records for offline-to-online sync."
+    },
+    "/curriculum_lessons/{lessonId}": {
+      "schema": { "$ref": "#/entities/CurriculumLesson" },
+      "description": "Verified dynamic curriculum lessons managed by admins."
+    },
+    "/admin_audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminAuditLog" },
+      "description": "Immutable administrative activity logs."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRole" },
+      "description": "Trusted admin role registry (read-only from client)."
+    }
+  }
+}

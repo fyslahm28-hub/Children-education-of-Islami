@@ -1,0 +1,209 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny all by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Verified Project Owner check via Google Auth token
+    function isOwnerEmail() {
+      return isSignedIn() &&
+             request.auth.token.keys().hasAll(['email', 'email_verified']) &&
+             request.auth.token.email_verified == true &&
+             request.auth.token.email == 'foysalahamad102@gmail.com';
+    }
+
+    // Admin verification: checks trusted /admins/{uid} document OR verified project owner token
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        isOwnerEmail()
+      );
+    }
+
+    // Validation helper for UserProfile
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId == request.auth.uid && data.userId.size() <= 128 &&
+             data.explorerName is string && data.explorerName.size() >= 1 && data.explorerName.size() <= 80 &&
+             data.avatarIndex is int && data.avatarIndex >= 0 && data.avatarIndex <= 20 &&
+             data.totalStars is int && data.totalStars >= 0 && data.totalStars <= 100000 &&
+             data.completedLevelsCount is int && data.completedLevelsCount >= 0 && data.completedLevelsCount <= 500 &&
+             data.lastActiveLevelId is int && data.lastActiveLevelId >= 1 && data.lastActiveLevelId <= 500 &&
+             data.dailyGoalMinutes is int && data.dailyGoalMinutes >= 5 && data.dailyGoalMinutes <= 180 &&
+             data.dailyPracticedMinutes is int && data.dailyPracticedMinutes <= 1440 && data.dailyPracticedMinutes >= 0 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Validation helper for LessonProgress (anti-duplicate & anti-regression sync)
+    function isValidLessonProgress(data) {
+      return data.userId is string && data.userId == request.auth.uid && data.userId.size() <= 128 &&
+             data.levelId is int && data.levelId >= 1 && data.levelId <= 500 &&
+             data.starsEarned is int && data.starsEarned >= 0 && data.starsEarned <= 3 &&
+             data.bestScore is int && data.bestScore >= 0 && data.bestScore <= 10000 &&
+             data.isCompleted is bool &&
+             data.mistakeCategory is string && data.mistakeCategory.size() <= 80 &&
+             data.clientUpdatedAtEpoch is int && data.clientUpdatedAtEpoch >= 0 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidOptionalQuizFields(data) {
+      return (!('quizQuestionBn' in data) || (data.quizQuestionBn is string && data.quizQuestionBn.size() <= 500)) &&
+             (!('quizOptionsJoined' in data) || (data.quizOptionsJoined is string && data.quizOptionsJoined.size() <= 1000)) &&
+             (!('quizCorrectIndex' in data) || (data.quizCorrectIndex is int && data.quizCorrectIndex >= 0 && data.quizCorrectIndex <= 3));
+    }
+
+    // Validation helper for CurriculumLesson (Admin content management)
+    // Enforces that a lesson cannot be published unless teacherVerified == true
+    function isValidCurriculumLesson(data) {
+      return data.stageNumber is int && data.stageNumber >= 1 && data.stageNumber <= 6 &&
+             data.levelOrder is int && data.levelOrder >= 1 && data.levelOrder <= 500 &&
+             data.titleBn is string && data.titleBn.size() >= 2 && data.titleBn.size() <= 150 &&
+             data.arabicContent is string && data.arabicContent.size() >= 1 && data.arabicContent.size() <= 2000 &&
+             data.pronunciationBn is string && data.pronunciationBn.size() >= 1 && data.pronunciationBn.size() <= 1000 &&
+             data.meaningBn is string && data.meaningBn.size() >= 1 && data.meaningBn.size() <= 1500 &&
+             data.audioSourceUrl is string && data.audioSourceUrl.size() <= 500 &&
+             data.teacherVerified is bool &&
+             data.isPublished is bool &&
+             (!data.isPublished || data.teacherVerified == true) &&
+             data.authorUid is string && data.authorUid == request.auth.uid && data.authorUid.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time &&
+             isValidOptionalQuizFields(data);
+    }
+
+    // Validation helper for AdminAuditLog
+    function isValidAdminAuditLog(data) {
+      return data.adminUid is string && data.adminUid == request.auth.uid && data.adminUid.size() <= 128 &&
+             data.actionType is string && data.actionType.size() >= 2 && data.actionType.size() <= 60 &&
+             data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+             data.summaryBn is string && data.summaryBn.size() >= 2 && data.summaryBn.size() <= 500 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // 1. User Profile Collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll(['userId', 'explorerName', 'avatarIndex', 'totalStars', 'completedLevelsCount', 'lastActiveLevelId', 'dailyGoalMinutes', 'dailyPracticedMinutes', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'explorerName', 'avatarIndex', 'totalStars', 'completedLevelsCount', 'lastActiveLevelId', 'dailyGoalMinutes', 'dailyPracticedMinutes', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['explorerName', 'avatarIndex', 'totalStars', 'completedLevelsCount', 'lastActiveLevelId', 'dailyGoalMinutes', 'dailyPracticedMinutes', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      // 2. Deterministic Lesson Progress Subcollection
+      match /lesson_progress/{progressId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(progressId) && (request.auth.uid == userId || isAdmin());
+        allow list: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(progressId) &&
+                         request.auth.uid == userId &&
+                         incoming().keys().hasAll(['userId', 'levelId', 'starsEarned', 'bestScore', 'isCompleted', 'mistakeCategory', 'clientUpdatedAtEpoch', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'levelId', 'starsEarned', 'bestScore', 'isCompleted', 'mistakeCategory', 'clientUpdatedAtEpoch', 'createdAt', 'updatedAt']) &&
+                         isValidLessonProgress(incoming());
+
+        // Anti-regression guard: starsEarned, bestScore, and clientUpdatedAtEpoch can never decrease on update
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(progressId) &&
+                         request.auth.uid == userId &&
+                         isValidLessonProgress(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().levelId == existing().levelId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().starsEarned >= existing().starsEarned &&
+                         incoming().bestScore >= existing().bestScore &&
+                         incoming().clientUpdatedAtEpoch >= existing().clientUpdatedAtEpoch &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['starsEarned', 'bestScore', 'isCompleted', 'mistakeCategory', 'clientUpdatedAtEpoch', 'updatedAt']);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(progressId) && request.auth.uid == userId;
+      }
+    }
+
+    // 3. Dynamic Curriculum Lessons (Read published for learners; full CRUD for verified Admins only)
+    match /curriculum_lessons/{lessonId} {
+      allow get: if isSignedIn() && isValidId(lessonId) && (isAdmin() || resource == null || resource.data.isPublished == true);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.isPublished == true);
+
+      allow create: if isSignedIn() &&
+                       isValidId(lessonId) &&
+                       isAdmin() &&
+                       incoming().keys().hasAll(['stageNumber', 'levelOrder', 'titleBn', 'arabicContent', 'pronunciationBn', 'meaningBn', 'audioSourceUrl', 'teacherVerified', 'isPublished', 'authorUid', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['stageNumber', 'levelOrder', 'titleBn', 'arabicContent', 'pronunciationBn', 'meaningBn', 'audioSourceUrl', 'teacherVerified', 'isPublished', 'authorUid', 'createdAt', 'updatedAt', 'quizQuestionBn', 'quizOptionsJoined', 'quizCorrectIndex']) &&
+                       isValidCurriculumLesson(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(lessonId) &&
+                       isAdmin() &&
+                       isValidCurriculumLesson(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['stageNumber', 'levelOrder', 'titleBn', 'arabicContent', 'pronunciationBn', 'meaningBn', 'audioSourceUrl', 'teacherVerified', 'isPublished', 'authorUid', 'updatedAt', 'quizQuestionBn', 'quizOptionsJoined', 'quizCorrectIndex']);
+
+      allow delete: if isSignedIn() && isValidId(lessonId) && isAdmin();
+    }
+
+    // 4. Admin Audit Logs (Append-only for verified Admins)
+    match /admin_audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && isAdmin();
+      allow list: if isSignedIn() && isAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(logId) &&
+                       isAdmin() &&
+                       incoming().keys().hasAll(['adminUid', 'actionType', 'targetId', 'summaryBn', 'createdAt']) &&
+                       incoming().keys().hasOnly(['adminUid', 'actionType', 'targetId', 'summaryBn', 'createdAt']) &&
+                       isValidAdminAuditLog(incoming());
+
+      allow update, delete: if false;
+    }
+
+    // 5. Trusted Admin Registry (Readable by self/Admin; creatable only by verified Owner/Admin, never by regular users)
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow create, update: if isSignedIn() &&
+                               isValidId(adminId) &&
+                               isAdmin() &&
+                               incoming().keys().hasAll(['email', 'role', 'grantedAt']) &&
+                               incoming().keys().hasOnly(['email', 'role', 'grantedAt']) &&
+                               incoming().email is string && incoming().email.size() >= 3 && incoming().email.size() <= 150 &&
+                               incoming().role is string && incoming().role.size() >= 3 && incoming().role.size() <= 40 &&
+                               incoming().grantedAt is timestamp && incoming().grantedAt <= request.time;
+      allow list, delete: if false;
+    }
+  }
+}

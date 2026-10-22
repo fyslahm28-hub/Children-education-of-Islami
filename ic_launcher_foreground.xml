@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Glowing Golden Crescent Moon & Open Book with Star inside 66dp safe zone (21..87) -->
+    <!-- Golden Crescent Moon -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M58,25 C43,25 31,37 31,52 C31,67 43,79 58,79 C65,79 71,76 76,71 C69,73 61,71 55,65 C47,57 47,44 55,36 C60,31 67,29 74,30 C69,27 64,25 58,25 Z" />
+    <!-- Five-pointed Star -->
+    <path
+        android:fillColor="#FEF08A"
+        android:pathData="M70,36 L72.5,41.5 L78.5,42.2 L74,46.2 L75.2,52 L70,49 L64.8,52 L66,46.2 L61.5,42.2 L67.5,41.5 Z" />
+    <!-- Open Storybook Base -->
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M34,66 C41,63 49,64 54,68 C59,64 67,63 74,66 L74,80 C67,77 59,78 54,82 C49,78 41,77 34,80 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,64 C42,61 49,62 54,66 C59,62 66,61 72,64 L72,76 C66,73 59,74 54,78 C49,74 42,73 36,76 Z" />
+</vector>
